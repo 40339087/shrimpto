@@ -5,10 +5,20 @@ const Config = require("./config.json")
 const notionClient = new Notion.Client({auth: Config.NOTION_CLIENT_TOKEN});
 
 module.exports = {
-    async createWallet(memberId) {
+    async createWallet(memberId, avatarUrl) {
         const walletCreation = await notionClient.pages.create({
             parent: {
                 database_id: Config.WALLET_TABLE_ID
+            },
+            icon:{
+                external: {
+                    url: avatarUrl
+                }
+            },
+            cover: {
+                external: {
+                    url: avatarUrl
+                }
             },
             properties: {
                 walletId: {

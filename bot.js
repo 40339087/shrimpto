@@ -18,6 +18,16 @@ discordClient.once("ready", async() => {
     )
 })
 
+discordClient.on("messageCreate", async(message) => {
+    const memberWallet = await NotionWrapper.getUserWallet(message.member.id)
+
+    if (memberWallet === false) {
+        return
+    }
+
+    await NotionWrapper.increaseBalance(message.member.id, 1)
+})
+
 // TODO: Move these commands into a different file.
 discordClient.on("interactionCreate", async(interaction) => {
     if (!interaction.isCommand()) return;
@@ -28,7 +38,7 @@ discordClient.on("interactionCreate", async(interaction) => {
         case "create_wallet": {
             const memberWallet = await NotionWrapper.getUserWallet(interaction.member.id);
             if (memberWallet === false) {
-                await NotionWrapper.createWallet(interaction.member.id)
+                await NotionWrapper.createWallet(interaction.member.id, interaction.member.user.avatarURL())
                 interaction.editReply("Created a wallet for you! You have 🦐200.")
             } else {
                 console.log("We've already seen this user!");
