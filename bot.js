@@ -25,68 +25,75 @@ discordClient.on("interactionCreate", async(interaction) => {
     await interaction.deferReply();
 
     switch (interaction.commandName) {
-        case "create_wallet":
-            const canCreate = !await NotionWrapper.checkUserHasWallet(interaction.member.id);
-
-            if (canCreate) {
-                await NotionWrapper.createWallet(interaction)
+        case "create_wallet": {
+            const memberWallet = await NotionWrapper.getUserWallet(interaction.member.id);
+            if (memberWallet === false) {
+                await NotionWrapper.createWallet(interaction.member.id)
                 interaction.editReply("Created a wallet for you! You have 🦐200.")
             } else {
                 console.log("We've already seen this user!");
                 interaction.editReply("Cannot create a wallet for you, you already have one!")
             }
             break;
-        case "get_wallet":
-            const hasWallet = await NotionWrapper.checkUserHasWallet(interaction.member.id);
-            
-            if (hasWallet) {
-                const userWallet = await NotionWrapper.getUserWallet(interaction.member.id);
+        }
+        case "get_wallet": {
+            const memberWallet = await NotionWrapper.getUserWallet(interaction.member.id)
+
+            if (memberWallet === false) {
+                interaction.editReply("You don't have a wallet! Create one with /create_wallet")
+            } else {
                 interaction.editReply(
                     {
                         embeds: [
                             new Discord.MessageEmbed()
                             .setTitle(`${interaction.member.user.username}'s Wallet`)
                             .setAuthor("ShrimptoBot", "https://www.pngitem.com/pimgs/m/110-1101897_shrimp-png-transparent-png.png")
-                            .addField("Balance", `${userWallet.properties.balance.number}`, true)
-                            .addField("Created At", `${new Date(userWallet.properties.generatedAt.date.start).toUTCString()}`, true)
+                            .addField("Balance", `${memberWallet.properties.balance.number}`, true)
+                            .addField("Created At", `${new Date(memberWallet.properties.generatedAt.date.start).toUTCString()}`, true)
                         ]
                     }
                 )
-            } else {
-                interaction.editReply("You don't have a wallet! Create one with /create_wallet")
             }
             break;
-        case "send_shrimpto":
-            // check if the user has a wallet.
-            const userHasWallet = await NotionWrapper.checkUserHasWallet(interaction.member.id);
+        }
+        case "send_shrimpto": {
+            const senderWallet = await NotionWrapper.getUserWallet(interaction.member.id)
 
-            if (!userHasWallet) {
+            if (!senderWallet) {
                 interaction.editReply("You don't have a wallet! Create one with /create_wallet")
+                return
             }
 
-            const targetHasWallet = await NotionWrapper.checkUserHasWallet(interaction.options.getUser("recipient").id)
+            const recipientWallet = await NotionWrapper.getUserWallet(interaction.options.getUser("recipient").id)
 
-            if (!targetHasWallet) {
-                interaction.editReply(`${interaction.options.getUser("recipient").username} doesn't have a wallet.`)
+            if (!recipientWallet) {
+                interaction.editReply("They don't have a wallet! Ask them to create one with /create_wallet")
+                return
             }
 
             const transactionValid = await NotionWrapper.validateTransaction(
-                await NotionWrapper.getUserWallet(interaction.member.id), interaction.options.getNumber("amount")
+                interaction.member.id,
+                interaction.options.getUser("recipient").id,
+                interaction.options.getNumber("amount")
             )
 
-            if (transactionValid) {
-                await NotionWrapper.executeTransaction(
-                    interaction.member.id, interaction.options.getUser("recipient").id, interaction.options.getNumber("amount")
-                )
-                interaction.editReply("Shrimpto Sent!")
-
-            } else {
-                interaction.editReply("You don't have enough Shrimpto to send.")
+            if (!transactionValid) {
+                interaction.editReply("You don't have enough Shrimpto for this transaction...");
+                return
             }
+
+            await NotionWrapper.executeTransaction(
+                interaction.member.id,
+                interaction.options.getUser("recipient").id,
+                interaction.options.getNumber("amount")
+            )
+            interaction.editReply("Transaction Complete.")
             break;
-        case "request_shrimpto":
+        }
+        case "request_shrimpto": {
             console.log("Requesting Shrimpto from another user.")
             break;
+        }
     }
 })
 

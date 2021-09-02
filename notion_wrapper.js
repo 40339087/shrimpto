@@ -1,20 +1,30 @@
 const Notion = require("@notionhq/client")
+const { v4: uuidv4 } = require("uuid");
 const Config = require("./config.json")
 
 const notionClient = new Notion.Client({auth: Config.NOTION_CLIENT_TOKEN});
 
 module.exports = {
-    async createWallet(interaction) {
+    async createWallet(memberId) {
         const walletCreation = await notionClient.pages.create({
             parent: {
                 database_id: Config.WALLET_TABLE_ID
             },
             properties: {
-                discordId: {
+                walletId: {
                     title: [
                         {
                             text: {
-                                content: interaction.member.id
+                                content: uuidv4()
+                            }
+                        }
+                    ]
+                },
+                discordId: {
+                    rich_text: [
+                        {
+                            text: {
+                                content: memberId
                             }
                         }
                     ]
@@ -30,58 +40,101 @@ module.exports = {
             }
         })
     },
-    async checkUserHasWallet(discordId) {
+    async getUserWallet(memberId) {
         const walletQuery = await notionClient.databases.query({
             database_id: Config.WALLET_TABLE_ID,
             filter: {
                 property: "discordId",
                 text: {
-                    contains: discordId
+                    contains: memberId
                 }
             }
         })
-        return walletQuery.results.length === 1
+        if (walletQuery.results.length === 1) {
+            return walletQuery.results[0]
+        }
+        return false;
     },
-    async getUserWallet(discordId) {
-        const walletQuery = await notionClient.databases.query({
-            database_id: Config.WALLET_TABLE_ID,
-            filter: {
-                property: "discordId",
-                text: {
-                    contains: discordId
-                }
-            }
-        })
-        return walletQuery.results[0]
-    },
-    async validateTransaction(senderWallet, amount) {
-        const senderBalance = senderWallet.properties.balance.number
-        return senderBalance >= amount
+    async validateTransaction(senderId, recipientId, amount) {
+        const senderWallet = await this.getUserWallet(senderId);
+        const recipientWallet = await this.getUserWallet(recipientId)
+        
+        return senderWallet.properties.balance.number >= amount
     },
     async executeTransaction(senderId, recipientId, amount) {
         const senderWallet = await this.getUserWallet(senderId);
         const recipientWallet = await this.getUserWallet(recipientId);
 
-        await notionClient.pages.update(
-            {
-                page_id: senderWallet.id,
-                properties: {
-                    balance: {
-                        number: senderWallet.properties.balance.number - amount
-                    }
+        await notionClient.pages.update({
+            page_id: senderWallet.id,
+            properties: {
+                balance: {
+                    number: senderWallet.properties.balance.number - amount
                 }
             }
-        )
+        })
 
-        await notionClient.pages.update(
-            {
-                page_id: recipientWallet.id,
-                properties: {
-                    balance: {
-                        number: recipientWallet.properties.balance.number + amount
+        await notionClient.pages.update({
+            page_id: recipientWallet.id,
+            properties: {
+                balance: {
+                    number: recipientWallet.properties.balance.number + amount
+                }
+            }
+        })
+
+        await this.logTransaction(senderWallet, recipientWallet, amount);
+    },
+    async logTransaction(senderWallet, recipientWallet, amount) {
+        await notionClient.pages.create({
+            parent: {
+                database_id: Config.TRANSACTION_TABLE_ID
+            },
+            properties: {
+                transactionId: {
+                    title: [
+                        {
+                            text: {
+                                content: uuidv4()
+                            }
+                        }
+                    ]
+                },
+                senderWalletId: {
+                    relation: [
+                        {
+                            id: senderWallet.id
+                        }
+                    ]
+                },
+                recipientWalletId: {
+                    relation: [
+                        {
+                            id: recipientWallet.id
+                        }
+                    ]
+                },
+                amount: {
+                    number: amount
+                },
+                transactedAt: {
+                    date: {
+                        start: new Date().toISOString()
                     }
                 }
             }
-        )
+        })
+    },
+    async increaseBalance(recipientId, amount) {
+        const recipientWallet = await this.getUserWallet(recipientId);
+
+        await notionClient.pages.update({
+            page_id: recipientWallet.id,
+            properties: {
+                balance: {
+                    number: recipientWallet.properties.balance.number + amount
+                }
+            }
+        })
     }
 }
